@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Маршруты первопроходцев | Интерактивная карта</title>
+    
+    <!-- Шрифты и иконки -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet CSS (Бесплатная карта без API-ключа) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        :root {
+            --pure-white: #FFFFFF;
+            --soft-white: #FEFCF8;
+            --gold: #C9A03D;
+            --gold-light: #E6C468;
+            --gold-dark: #A47E2E;
+            --dark-charcoal: #1E2A36;
+            --slate: #2C3E4E;
+            --gray-light: #F5F5F5;
+            --text-dark: #1F2D3D;
+            --text-muted: #5A6E7C;
+            --shadow-sm: 0 8px 20px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.05);
+            --shadow-md: 0 20px 35px -12px rgba(0,0,0,0.1);
+            --border-gold: 1px solid rgba(201, 160, 61, 0.2);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--soft-white);
+            color: var(--text-dark);
+            line-height: 1.6;
+            scroll-behavior: smooth;
+        }
+
+        .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+
+        /* Навигация */
+        .navbar {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 1px 0 rgba(0,0,0,0.03), 0 4px 12px rgba(0,0,0,0.03);
+            position: sticky; top: 0; z-index: 1000;
+        }
+        .nav-container {
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px 24px; max-width: 1400px; margin: 0 auto; gap: 10px; flex-wrap: wrap;
+        }
+        .nav-btn {
+            background: transparent; border: 2px solid transparent;
+            color: var(--text-muted); padding: 10px 24px; border-radius: 40px;
+            font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: 0.3s;
+        }
+        .nav-btn:hover { color: var(--gold-dark); background: rgba(201,160,61,0.05); }
+        .nav-btn.active {
+            color: var(--pure-white); background: var(--gold);
+            box-shadow: 0 4px 12px rgba(201,160,61,0.3);
+        }
+
+        /* Заголовки */
+        .hero {
+            text-align: center; padding: 60px 20px 40px;
+            background: linear-gradient(135deg, #FFFCF5 0%, #FFFFFF 100%);
+        }
+        .hero h1 {
+            font-size: 2.8rem; font-weight: 800; color: var(--dark-charcoal);
+            margin-bottom: 16px; letter-spacing: -0.5px;
+        }
+        .hero p { font-size: 1.15rem; color: var(--text-muted); max-width: 700px; margin: 0 auto; }
+
+        /* Секции */
+        .section { display: none; padding: 40px 0 80px; animation: fadeIn 0.4s ease; }
+        .section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        .pioneer-header {
+            background: var(--pure-white); padding: 32px; border-radius: 24px;
+            box-shadow: var(--shadow-sm); border: var(--border-gold); margin-bottom: 24px; text-align: center;
+        }
+        .pioneer-header h2 { font-size: 2rem; color: var(--dark-charcoal); margin-bottom: 12px; }
+        .pioneer-header p { color: var(--text-muted); max-width: 800px; margin: 0 auto; }
+
+        /* Выбор экспедиции */
+        .expedition-selector {
+            background: var(--pure-white); padding: 20px 24px; border-radius: 20px;
+            margin-bottom: 24px; display: flex; align-items: center; gap: 16px;
+            box-shadow: var(--shadow-sm); flex-wrap: wrap;
+        }
+        .expedition-selector label { font-weight: 700; color: var(--dark-charcoal); font-size: 1.05rem; white-space: nowrap; }
+        .expedition-selector select {
+            flex: 1; min-width: 280px; padding: 14px 18px; font-size: 1rem;
+            border: 2px solid var(--gray-light); border-radius: 12px;
+            background: var(--soft-white); cursor: pointer; transition: 0.2s; font-family: 'Inter', sans-serif;
+        }
+        .expedition-selector select:focus { outline: none; border-color: var(--gold); }
+
+        /* Карта */
+        .map-container {
+            height: 550px; border-radius: 24px; overflow: hidden;
+            box-shadow: var(--shadow-md); border: 1px solid #E9ECEF; position: relative;
+        }
+        #map { width: 100%; height: 100%; z-index: 1; }
+
+        /* Информация о маршруте */
+        .route-info {
+            background: var(--pure-white); padding: 28px; border-radius: 24px;
+            margin-top: 24px; box-shadow: var(--shadow-sm); border: var(--border-gold);
+        }
+        .route-info h3 { color: var(--dark-charcoal); margin-bottom: 16px; font-size: 1.4rem; display: flex; align-items: center; gap: 10px; }
+        .route-info ul { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+        .route-info li {
+            padding: 16px; background: var(--soft-white); border-radius: 16px;
+            display: flex; align-items: flex-start; gap: 12px; transition: 0.2s;
+        }
+        .route-info li:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+        .route-info li i { color: var(--gold); font-size: 1.2rem; margin-top: 3px; flex-shrink: 0; }
+        .route-info li strong { display: block; color: var(--dark-charcoal); margin-bottom: 4px; }
+        .route-info li span { font-size: 0.9rem; color: var(--text-muted); }
+        .route-info li .coords { font-size: 0.8rem; color: var(--gold-dark); font-family: monospace; margin-top: 6px; display: block; }
+
+        footer {
+            background: var(--dark-charcoal); color: #D4DCE4; text-align: center; padding: 32px 20px; margin-top: 60px;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2rem; }
+            .nav-container { gap: 8px; }
+            .nav-btn { padding: 8px 16px; font-size: 0.85rem; }
+            .map-container { height: 400px; }
+            .route-info ul { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="nav-container">
+        <button class="nav-btn active" data-target="staduhin">М. Стадухин</button>
+        <button class="nav-btn" data-target="bering">В. Беринг</button>
+        <button class="nav-btn" data-target="sidorov">М. Сидоров</button>
+        <button class="nav-btn" data-target="iohelson">В. Иохельсон</button>
+    </div>
+</nav>
+
+<div class="hero">
+    <div class="container">
+        <h1>🧭 Маршруты первопроходцев</h1>
+        <p>Интерактивная карта экспедиций по освоению Сибири, Дальнего Востока и Северного морского пути</p>
+    </div>
+</div>
+
+<main class="container">
+    <!-- СТАДУХИН -->
+    <section id="staduhin" class="section active">
+        <div class="pioneer-header">
+            <h2>Михаил Васильевич Стадухин</h2>
+            <p>Землепроходец XVII века, казачий атаман. Открыл реку Колыму, исследовал Пенжину, Гижигу и Тауй, составил первые чертежи Северо-Восточной Азии.</p>
+        </div>
+        <div class="expedition-selector">
+            <label for="staduhin-select"><i class="fas fa-route"></i> Экспедиция:</label>
+            <select id="staduhin-select" data-pioneer="staduhin"></select>
+        </div>
+        <div class="map-container"><div id="map-staduhin"></div></div>
+        <div class="route-info" id="info-staduhin"></div>
+    </section>
+
+    <!-- БЕРИНГ -->
+    <section id="bering" class="section">
+        <div class="pioneer-header">
+            <h2>Витус Беринг</h2>
+            <p>Капитан-командор, руководитель Первой и Второй Камчатских экспедиций. Доказал наличие пролива между Азией и Америкой, картографировал побережье.</p>
+        </div>
+        <div class="expedition-selector">
+            <label for="bering-select"><i class="fas fa-route"></i> Экспедиция:</label>
+            <select id="bering-select" data-pioneer="bering"></select>
+        </div>
+        <div class="map-container"><div id="map-bering"></div></div>
+        <div class="route-info" id="info-bering"></div>
+    </section>
+
+    <!-- СИДОРОВ -->
+    <section id="sidorov" class="section">
+        <div class="pioneer-header">
+            <h2>Михаил Константинович Сидоров</h2>
+            <p>Купец первой гильдии, энтузиаст освоения Севера. Разрушил миф о «Карском ледяном мешке», организовав исторический рейс парохода «Утренняя Заря».</p>
+        </div>
+        <div class="expedition-selector">
+            <label for="sidorov-select"><i class="fas fa-route"></i> Экспедиция:</label>
+            <select id="sidorov-select" data-pioneer="sidorov"></select>
+        </div>
+        <div class="map-container"><div id="map-sidorov"></div></div>
+        <div class="route-info" id="info-sidorov"></div>
+    </section>
+
+    <!-- ИОХЕЛЬСОН -->
+    <section id="iohelson" class="section">
+        <div class="pioneer-header">
+            <h2>Владимир Германович Иохельсон</h2>
+            <p>Великий антрополог и этнограф. Исследовал коренные народы Сибири, Чукотки, Камчатки и Алеутских островов, доказывая гипотезу Берингийского моста.</p>
+        </div>
+        <div class="expedition-selector">
+            <label for="iohelson-select"><i class="fas fa-route"></i> Экспедиция:</label>
+            <select id="iohelson-select" data-pioneer="iohelson"></select>
+        </div>
+        <div class="map-container"><div id="map-iohelson"></div></div>
+        <div class="route-info" id="info-iohelson"></div>
+    </section>
+</main>
+
+<footer>
+    <p>© 2026 · Маршруты первопроходцев · На основе исторических данных</p>
+    <p style="font-size: 0.85rem; margin-top: 8px; opacity: 0.7;">Карты предоставлены OpenStreetMap (Leaflet)</p>
+</footer>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// ============ БАЗА ДАННЫХ МАРШРУТОВ ============
+const expeditionsData = {
+    staduhin: [
+        {
+            name: "1633 — Поход на Вилюй",
+            color: "#C9A03D",
+            points: [
+                { coords: [62.0355, 129.6755], title: "Якутск", desc: "Начало служебного похода" },
+                { coords: [63.7549, 121.6236], title: "Река Вилюй", desc: "Цель: сбор ясака с местного населения" }
+            ]
+        },
+        {
+            name: "1641–1647 — Поход на Колыму",
+            color: "#2C3E4E",
+            points: [
+                { coords: [62.0355, 129.6755], title: "Якутск", desc: "Начало самостоятельного похода" },
+                { coords: [63.4645, 142.7852], title: "Река Оймякон", desc: "Перевал через хребты" },
+                { coords: [70.6256, 147.9083], title: "Река Индигирка", desc: "Крупная река Северо-Востока" },
+                { coords: [69.9833, 151.6167], title: "Река Алазея", desc: "Путь к Колыме" },
+                { coords: [67.4572, 153.7068], title: "Река Колыма", desc: "Ключевое открытие — заложен острог" }
+            ]
+        },
+        {
+            name: "1651–1657 — От Анадыря к Охотску",
+            color: "#A47E2E",
+            points: [
+                { coords: [64.6818, 170.4064], title: "Река Анадырь", desc: "Встреча с отрядом Дежнёва" },
+                { coords: [61.9333, 161.5000], title: "Река Пенжина", desc: "Движение к Охотскому побережью" },
+                { coords: [61.9495, 160.3822], title: "Река Гижига", desc: "Исследование новых земель" },
+                { coords: [59.7249, 149.3272], title: "Тауй", desc: "Основание Тауйского зимовья" },
+                { coords: [59.3611, 143.2255], title: "Охотский острог", desc: "Прибытие в 1657 году" },
+                { coords: [62.0355, 129.6755], title: "Якутск", desc: "Тяжёлый переход через горы" }
+            ]
+        }
+    ],
+    bering: [
+        {
+            name: "1725–1730 — Первая Камчатская экспедиция",
+            color: "#C9A03D",
+            points: [
+                { coords: [59.9343, 30.3351], title: "Санкт-Петербург", desc: "Начало экспедиции по указу Петра I" },
+                { coords: [58.2006, 68.2568], title: "Тобольск", desc: "Перевалочный пункт в Сибири" },
+                { coords: [62.0355, 129.6755], title: "Якутск", desc: "Зимовка и подготовка" },
+                { coords: [59.3611, 143.2255], title: "Охотск", desc: "Постройка кораблей" },
+                { coords: [52.8242, 156.2834], title: "Большерецк, Камчатка", desc: "База экспедиции" },
+                { coords: [66.0792, -169.6519], title: "Берингов пролив", desc: "Выход в Северный Ледовитый океан" }
+            ]
+        },
+        {
+            name: "1733–1743 — Вторая Камчатская экспедиция",
+            color: "#2C3E4E",
+            points: [
+                { coords: [59.9343, 30.3351], title: "Санкт-Петербург", desc: "Великая Северная экспедиция" },
+                { coords: [62.0355, 129.6755], title: "Якутск", desc: "3 года подготовки" },
+                { coords: [59.3611, 143.2255], title: "Охотск", desc: "Постройка пакетботов" },
+                { coords: [53.0440, 158.6500], title: "Петропавловск-Камчатский", desc: "Новая база экспедиции" },
+                { coords: [60.0500, -145.0000], title: "Остров Каяк, Аляска", desc: "Достижение берегов Америки" },
+                { coords: [55.2000, 166.4500], title: "Остров Беринга", desc: "Место гибели командора" }
+            ]
+        }
+    ],
+    sidorov: [
+        {
+            name: "1877 — Рейс парохода «Утренняя Заря»",
+            color: "#C9A03D",
+            points: [
+                { coords: [64.5401, 40.5433], title: "Архангельск", desc: "Начало исторического рейса" },
+                { coords: [69.8000, 60.7500], title: "Пролив Югорский Шар", desc: "Вход в Карское море" },
+                { coords: [73.5081, 80.5264], title: "Остров Диксон", desc: "Проверка маршрута Севморпути" },
+                { coords: [69.4053, 86.1778], title: "Устье Енисея", desc: "Доказательство проходимости пути" },
+                { coords: [70.2500, 59.5000], title: "Пролив Карские Ворота", desc: "Выход в Баренцево море" },
+                { coords: [59.9343, 30.3351], title: "Санкт-Петербург", desc: "Триумфальное возвращение" }
+            ]
+        }
+    ],
+    iohelson: [
+        {
+            name: "1894–1897 — Сибиряковская экспедиция",
+            color: "#C9A03D",
+            points: [
+                { coords: [62.0355, 129.6755], title: "Якутск", desc: "Первая научная работа" },
+                { coords: [66.7676, 123.3742], title: "Жиганск", desc: "Движение по Лене" },
+                { coords: [67.5484, 133.3881], title: "Верхоянск", desc: "Один из самых холодных городов" },
+                { coords: [67.4572, 153.7068], title: "Среднеколымск", desc: "Бассейн Колымы" },
+                { coords: [65.7388, 150.8835], title: "Верхнеколымск", desc: "Изучение юкагиров (р. Ясачная)" }
+            ]
+        },
+        {
+            name: "1897–1902 — Джесуповская экспедиция",
+            color: "#2C3E4E",
+            points: [
+                { coords: [43.1155, 131.8855], title: "Владивосток", desc: "Отправка на Дальний Восток" },
+                { coords: [59.3611, 143.2255], title: "Охотск", desc: "Охотское побережье" },
+                { coords: [53.0440, 158.6500], title: "Петропавловск-Камчатский", desc: "Исследование Камчатки" },
+                { coords: [64.7333, 177.5000], title: "Чукотка (Анадырь)", desc: "Изучение чукчей" },
+                { coords: [55.2000, 166.4500], title: "Командорские острова", desc: "Переход через Тихий океан" },
+                { coords: [64.5000, -165.4000], title: "Аляска (г. Ном)", desc: "Доказательство Берингийского моста" }
+            ]
+        },
+        {
+            name: "1908–1911 — Экспедиция Рябушинского",
+            color: "#A47E2E",
+            points: [
+                { coords: [53.0440, 158.6500], title: "Петропавловск-Камчатский", desc: "Финансирование Ф. Рябушинским" },
+                { coords: [55.0000, 166.5000], title: "Остров Беринга", desc: "Первые археологические раскопки" },
+                { coords: [52.8333, 172.7500], title: "Алеутские острова (о. Атту)", desc: "Изучение алеутов и их фольклора" }
+            ]
+        }
+    ]
+};
+
+// ============ ИНИЦИАЛИЗАЦИЯ КАРТ ============
+const maps = {};
+const layers = {};
+
+function initMap(pioneerId) {
+    if (maps[pioneerId]) return;
+    
+    // Создаем карту Leaflet
+    maps[pioneerId] = L.map(`map-${pioneerId}`, {
+        center: [65, 120],
+        zoom: 3,
+        scrollWheelZoom: false,
+        zoomControl: true
+    });
+
+    // Добавляем красивый слой OpenStreetMap
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19
+    }).addTo(maps[pioneerId]);
+
+    // Загружаем первую (самую раннюю) экспедицию
+    showExpedition(pioneerId, 0);
+}
+
+function showExpedition(pioneerId, index) {
+    const map = maps[pioneerId];
+    const expedition = expeditionsData[pioneerId][index];
+    
+    // Удаляем старые слои
+    if (layers[pioneerId]) {
+        layers[pioneerId].forEach(layer => map.removeLayer(layer));
+    }
+    layers[pioneerId] = [];
+    
+    const coords = expedition.points.map(p => p.coords);
+    const bounds = [];
+
+    // Добавляем метки
+    expedition.points.forEach((point, i) => {
+        const marker = L.circleMarker(point.coords, {
+            radius: 8,
+            fillColor: expedition.color,
+            color: "#fff",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.9
+        }).addTo(map);
+        
+        marker.bindPopup(`
+            <div style="font-family: 'Inter', sans-serif; min-width: 180px;">
+                <strong style="font-size: 1.1em; color: ${expedition.color};">${point.title}</strong><br>
+                <span style="color: #5A6E7C; font-size: 0.9em;">${point.desc}</span><br>
+                <small style="color: #999; font-family: monospace;">${point.coords[0].toFixed(4)}, ${point.coords[1].toFixed(4)}</small>
+            </div>
+        `);
+        
+        layers[pioneerId].push(marker);
+        bounds.push(point.coords);
+    });
+    
+    // Рисуем линию маршрута
+    const polyline = L.polyline(coords, {
+        color: expedition.color,
+        weight: 4,
+        opacity: 0.8,
+        dashArray: null,
+        lineJoin: 'round'
+    }).addTo(map);
+    layers[pioneerId].push(polyline);
+    
+    // Центрируем карту на маршруте
+    map.fitBounds(bounds, { padding: [40, 40] });
+    
+    // Обновляем информацию о маршруте
+    updateRouteInfo(pioneerId, expedition);
+}
+
+function updateRouteInfo(pioneerId, expedition) {
+    const infoDiv = document.getElementById(`info-${pioneerId}`);
+    let html = `<h3 style="color: ${expedition.color}"><i class="fas fa-map-signs"></i> ${expedition.name}</h3><ul>`;
+    expedition.points.forEach((p, i) => {
+        html += `
+            <li>
+                <i class="fas fa-map-pin"></i>
+                <div>
+                    <strong>${i + 1}. ${p.title}</strong>
+                    <span>${p.desc}</span>
+                    <span class="coords"><i class="fas fa-crosshairs"></i> ${p.coords[0].toFixed(4)}, ${p.coords[1].toFixed(4)}</span>
+                </div>
+            </li>`;
+    });
+    html += '</ul>';
+    infoDiv.innerHTML = html;
+}
+
+// ============ ЗАПОЛНЕНИЕ SELECT-ОВ ============
+function populateSelects() {
+    Object.keys(expeditionsData).forEach(pioneerId => {
+        const select = document.getElementById(`${pioneerId}-select`);
+        expeditionsData[pioneerId].forEach((exp, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = exp.name;
+            select.appendChild(option);
+        });
+        
+        select.addEventListener('change', (e) => {
+            showExpedition(pioneerId, parseInt(e.target.value));
+        });
+    });
+}
+
+// ============ ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ============
+document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        
+        btn.classList.add('active');
+        const target = btn.dataset.target;
+        document.getElementById(target).classList.add('active');
+        
+        // Инициализируем карту с небольшой задержкой для корректного рендеринга
+        setTimeout(() => {
+            initMap(target);
+            maps[target].invalidateSize(); // Исправляет баг рендеринга карты в скрытом блоке
+        }, 50);
+    });
+});
+
+// ============ ЗАПУСК ============
+document.addEventListener('DOMContentLoaded', () => {
+    populateSelects();
+    initMap('staduhin');
+});
+</script>
+
+</body>
+</html>
